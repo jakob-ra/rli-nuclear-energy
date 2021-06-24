@@ -28,6 +28,12 @@ df['date'] = df.date.apply(lambda x: ' '.join(x.split()[:3])).apply(dateparser.p
 df['copyright'] = df.raw.apply(lambda x: x.split('\n\n\n')[1])
 df['text'] = df.raw.apply(lambda x: x.split('\n\n\n')[3])
 df['text'] = df.text.apply(lambda x: x.split('Load-Date: ')[0])
+df['length'] = df.raw.apply(lambda x: x.split('Length: ')[1])
+df['length'] = df.length.apply(lambda x: x.split(' words')[0])
+df['length'] = df.length.astype('int')
+df['source_agg'] = df.source # two sources have different spellings and subcategories
+df.loc[df.source_agg.str.contains('De Stentor'), 'source_agg'] = 'De Stentor'
+df.loc[df.source_agg.str.contains('Limburg'), 'source_agg'] = 'Dagblad de Limburger'
 
 df.to_excel(os.path.join(path, 'rli-articles-clean.xlsx'), index=False)
 
@@ -38,6 +44,3 @@ df.to_excel(os.path.join(path, 'rli-articles-clean.xlsx'), index=False)
 
 # df['section'] = df.raw.apply(lambda x: x.split(':')[1])
 # df['section'] = df.section.apply(lambda x: x.split(';')[0])
-#
-# df['words'] = df.raw.apply(lambda x: x.split(':')[2])
-# df['words'] = df.words.apply(lambda x: x.split(' words')[0])
