@@ -32,10 +32,10 @@ df = df.groupby('text').source.apply(list).reset_index().merge(
 df['text'] = df.text.str.strip()
 
 # focus on paragraphs rather than whole articles
-df['text'] = df.text.str.split('\n')
-df = df.explode('text')
-df.reset_index(inplace=True)
-df = df[df.text.apply(len) > 15]
+# df['text'] = df.text.str.split('\n')
+# df = df.explode('text')
+# df.reset_index(inplace=True)
+# df = df[df.text.apply(len) > 15]
 
 # # Spacy lemmatization
 # # load Dutch model
@@ -88,7 +88,8 @@ remove_from_stop_words = ['miljoen', 'veiligheid', 'cost', 'europa', 'euro',
     'europese', 'omgeving', 'internationale','politieke', 'partijen', 'universiteit', 'kiezen', 'ziekenhuis',
     'economie', 'verkiezingen', 'land', 'groen', 'overheid', 'geld', 'partij', 'generatie',
     'belgië', 'verenigd koninkrijk', 'groot brittannië', 'frankrijk', 'duitsland', 'spanje', 'italië',
-    'verenigde Staten', 'gevaar', 'kost', 'miljard', 'economisch', 'prijs']
+    'verenigde Staten', 'gevaar', 'kost', 'miljard', 'economisch', 'prijs', 'bank', 'duur', 'kinderen',
+    'links', 'rechts', 'kamer', 'groningen', 'zeeland', 'brabant', 'provincie', 'gemeente', 'middenoosten']
 remove_from_stop_words = remove_from_stop_words + [' '.join(lemmatize(x)) for x in remove_from_stop_words]
 stop_words = [item for item in stop_words if item not in remove_from_stop_words]
 
@@ -96,51 +97,67 @@ vec = CountVectorizer(min_df=5, ngram_range=(1,2), stop_words=stop_words, max_fe
 X = vec.fit_transform(df.processed_text.apply(lambda x: ' '.join(x)))
 vocab = vec.get_feature_names()
 
-corpus = matutils.Sparse2Corpus(X.T)
-id2word = {v: k for k, v in vec.vocabulary_.items()}
-d = corpora.Dictionary()
-d.id2token = id2word
-d.token2id = {v: k for k, v in id2word.items()}
-
-lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
-                                           id2word=d,
-                                           num_topics=15,
-                                           random_state=2,
-                                           update_every=1,
-                                           passes=20,
-                                           alpha='auto',
-                                           eta=0.9,
-                                           per_word_topics=False)
-
-lda_model.print_topics()
-
-vis = gensimvis.prepare(lda_model, corpus, d)
-pyLDAvis.save_html(vis, os.path.join(path, 'Plots', 'lda_vis.html'))
-
-cm = CoherenceModel(model=lda_model, corpus=corpus, dictionary=d, coherence='u_mass')
-cm.get_coherence()  # get coherence value
+# corpus = matutils.Sparse2Corpus(X.T)
+# id2word = {v: k for k, v in vec.vocabulary_.items()}
+# d = corpora.Dictionary()
+# d.id2token = id2word
+# d.token2id = {v: k for k, v in id2word.items()}
+#
+# lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
+#                                            id2word=d,
+#                                            num_topics=15,
+#                                            random_state=2,
+#                                            update_every=1,
+#                                            passes=20,
+#                                            alpha='auto',
+#                                            eta=0.9,
+#                                            per_word_topics=False)
+#
+# lda_model.print_topics()
+#
+# vis = gensimvis.prepare(lda_model, corpus, d)
+# pyLDAvis.save_html(vis, os.path.join(path, 'Plots', 'lda_vis.html'))
+#
+# cm = CoherenceModel(model=lda_model, corpus=corpus, dictionary=d, coherence='u_mass')
+# cm.get_coherence()  # get coherence value
 
 # topics
-topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzam', 'uitstoot', 'broeikas', 'hernieuwbaar',
-        'duurzaamheid', 'opwarmen', 'atmosfeer', 'temperatuurstijging', 'parijs-akkoord', 'leefomgeving',
-        'energietransitie', '2 graden', 'emissie', 'opwarming', 'ipcc', 'antropogene', 'duurzame',
-        'verduurzaming', 'verduurzamen', 'duurzamer', 'duurzamheid', 'broeikasgassen', 'broeikasgas',
-        'broeikaseffect', 'broeikasgasuitstoot'], 'Waste and storage': ['afval', 'opslag', 'zoutlaag',
-        'zoutkoepel', 'opbergen', 'covra', 'eindberging', 'ondergronds', 'kleilaag', 'halveringstijd',
-        'halfwaardetijd', 'restwarmte', 'opslaan'],
-        'Geopolitics': ['geopolitiek', 'iran', 'conflict', 'middenoosten', 'poetin', 'arsenaal',
-                'centrifuge', 'ontwapening', 'verrijking', 'kernwapen', 'sanctie', 'militair'],
-        'Safety': ['veiligheid', 'ramp', 'tsjernobyl', 'fukushima', 'straling', 'tsunami', 'terror',
+# broeikas graden duurzamheid duurzamheid duurzamheid zoutlaag kleilaag halveringstijd  ongeluk slachtoffer grafiet tritium waarde intergenerationeel middenoosten
+topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzaam', 'uitstoot', 'hernieuwbaar',
+                'duurzaamheid', 'opwarmen', 'atmosfeer', 'temperatuurstijging', 'leefomgeving',
+                'energietransitie', 'emissie', 'opwarming', 'ipcc', 'duurzame',
+                'verduurzaming', 'verduurzamen', 'duurzamer', 'broeikasgassen', 'broeikasgas',
+                'broeikaseffect', 'broeikasgasuitstoot', 'klimaatverandering', 'klimaatakkoord', 'klimaatprobleem',
+                'klimaatneutraal', 'klimaatbeleid'],
+        'Waste and storage': ['afval', 'opslag',
+                'zoutkoepel', 'opbergen', 'covra', 'eindberging', 'ondergronds',
+                'halfwaardetijd', 'restwarmte', 'opslaan', 'berging'],
+        'Geopolitics': ['geopolitiek', 'iran', 'conflict', 'poetin', 'arsenaal',
+                'centrifuge', 'ontwapening', 'verrijking', 'kernwapens', 'sancties', 'militair', 'militairen',
+                'kernwapens'],
+        'Safety': ['veiligheid', 'ramp', 'tsjernobyl', 'fukushima', 'straling', 'tsunami',
                 'aardbeving', 'evacueren', 'explosie', 'catastrofe', 'radioactief', 'kanker', 'dosis',
-                'dode', 'aanslag', 'kernsmelting', 'meltdown', 'millisievert'],
+                'dode', 'aanslag', 'kernsmelting', 'meltdown', 'millisievert', 'beveiliging',
+                'ongeval', 'terrorisme', 'terroristen'],
         'Cost': ['kost', 'ontmanteling', 'levensduur', 'goedkoop', 'geld', 'subsidie', 'euro', 'cent',
-                'miljoen', 'miljard', 'invest', 'kilowattuur', 'kwh', 'financ', 'economisch', 'rendabel',
+                'miljoen', 'miljard', 'kilowattuur', 'kwh', 'economisch', 'rendabel',
                 'capaciteit', 'prijs', 'uitgaven', 'financieel', 'financiën', 'financiering', 'financieren',
                 'financieele', 'gefinancierd', 'financiers', 'investeren', 'investeringen', 'investering',
-                'investeerders', 'investeert', 'investeerder', 'investeringsbank', 'bank', 'banken'],
-        'Technology': ['zoutreactor', 'thorium', 'kernsplitsing', 'grafiet', 'uranium', 'tritium',
+                'investeerders', 'investeert', 'investeerder', 'investeringsbank', 'bank', 'banken', 'duur',
+                 'business case'],
+        'Technology': ['zoutreactor', 'thorium', 'kernsplitsing', 'uranium',
                 'splijtstof', 'neutronen', 'kettingreactie', 'koeling', 'koelmiddel', 'reactorvat',
-                'kernsplijting']}
+                'kernsplijting', 'reactor', 'kernreactoren', 'reactoren', 'thoriumreactor', 'fusiereactor',
+                'ontwerpen', 'smr', 'modulaire', 'technologie'],
+        'Ethics': ['ethiek', 'ethisch', 'principe', 'principes', 'filosofie', 'filosofen',
+                   'waarden', 'generatie', 'generaties', 'kinderen', 'kleinkinderen',
+                   'moreel', 'moraal', 'afweging', 'mensheid', 'filosoof', 'religie', 'wetenschap',
+                   'intellectueel', 'socioloog'],
+        'Politics': ['vvd', 'partij', 'd66', 'groenlinks', 'cda', 'kabinet', 'pvda', 'verkiezingsprogramma',
+                     'verkiezing', 'verkiezingen', 'rutte', 'coalitie', 'links', 'rechts', 'kamer',
+                     'democratie', 'kabinet', 'formatie'],
+        'Choice of site': ['groningen', 'zeeland', 'brabant', 'provincie', 'gemeente', 'borssele',
+                           'eemshaven', 'maasvlakte', 'locatiekeuze', 'locaties', 'bouwlocaties']}
 
 # pretty print seed words
 for topic in topic_keywords:
@@ -151,66 +168,66 @@ for topic in topic_keywords:
 Xc = (X.T * X)
 Xc = Xc.todense()
 co_occ = pd.DataFrame(Xc, columns=vocab, index=vocab)
-co_occ['plaatsvinden'].sort_values(ascending=False).head(60)
+co_occ['bouwlocaties'].sort_values(ascending=False).head(60)
 
 # find similar words via pre-trained word2vec
 model = KeyedVectors.load_word2vec_format('C:/Users/Jakob/Downloads/wikipedia-160.txt')
 [x[0] for x in model.most_similar('energiezekerheid', topn=20)]
 
 # example texts for keyword
-df[df.text.str.lower().str.contains('intergenerationeel')].text
-
+df[df.text.str.lower().str.contains('invest')].text
 
 # find keywords containing sub-phrase
 word_counts = pd.Series(X.toarray().sum(axis=0), index=vocab)
-word_counts[word_counts.index.str.contains('kennis')].sort_values(ascending=False).head(50)
-
-def form_query(keyword_list: list):
-    """ Returns regex query that matches on all keywords in the keyword list """
-
-    return '|'.join(keyword_list)
-
-# count occurences
-for topic in topic_keywords:
-    keywords = topic_keywords[topic]
-    # search both lemmatized and unlemmatized text
-    df[topic + '_matched'] = df.text.str.findall(form_query(topic_keywords[topic]), flags=re.I)
-    df[topic + '_matched'] = df[topic + '_matched'] + df.processed_text.apply(lambda x: ' '.join(x)).str.findall(
-            form_query(topic_keywords[topic]), flags=re.I)
-
-# example
-df[df['locatiekeuze'].str.len() > 0].text.sample().values
+word_counts[word_counts.index.str.contains('sancties')].sort_values(ascending=False).head(50)
 
 
-def print_most_frequent(flag):
-    value_counts = df[df[flag].str.len() > 0][flag].explode().str.lower().value_counts()
-    for key, val in zip(value_counts.index, value_counts):
-        print(key + ' ('+ str(val) + '),', end = ' ')
-    print('\n')
-    return
-
-for topic in topic_keywords:
-    print(topic + ':', str(len(df[df[topic + '_matched'].str.len() > 0])) + ' articles')
-    print_most_frequent(topic + '_matched')
-
-# dummy flag for topics
-for topic in topic_keywords:
-    df[topic] = df[topic + '_matched'].str.len() > 0
-
-monthly = df.groupby(df.date.dt.to_period('Y'))[list(topic_keywords.keys())].agg(sum)
-monthly = monthly.div(df.groupby(df.date.dt.to_period('Y')).size(), axis=0)
-# monthly.rolling(window=12).mean().plot()
-monthly.plot()
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.xticks(rotation=45, ha="right")
-plt.xlabel('Year')
-plt.ylabel('Share of articles mentioning topic')
-plt.show()
+# def form_query(keyword_list: list):
+#     """ Returns regex query that matches on all keywords in the keyword list """
+#
+#     return '|'.join(keyword_list)
+#
+# # count occurences
+# for topic in topic_keywords:
+#     keywords = topic_keywords[topic]
+#     # search both lemmatized and unlemmatized text
+#     df[topic + '_matched'] = df.text.str.findall(form_query(topic_keywords[topic]), flags=re.I)
+#     df[topic + '_matched'] = df[topic + '_matched'] + df.processed_text.apply(lambda x: ' '.join(x)).str.findall(
+#             form_query(topic_keywords[topic]), flags=re.I)
+#
+# # example
+# df[df['locatiekeuze'].str.len() > 0].text.sample().values
+#
+#
+# def print_most_frequent(flag):
+#     value_counts = df[df[flag].str.len() > 0][flag].explode().str.lower().value_counts()
+#     for key, val in zip(value_counts.index, value_counts):
+#         print(key + ' ('+ str(val) + '),', end = ' ')
+#     print('\n')
+#     return
+#
+# for topic in topic_keywords:
+#     print(topic + ':', str(len(df[df[topic + '_matched'].str.len() > 0])) + ' articles')
+#     print_most_frequent(topic + '_matched')
+#
+# # dummy flag for topics
+# for topic in topic_keywords:
+#     df[topic] = df[topic + '_matched'].str.len() > 0
+#
+# monthly = df.groupby(df.date.dt.to_period('Y'))[list(topic_keywords.keys())].agg(sum)
+# monthly = monthly.div(df.groupby(df.date.dt.to_period('Y')).size(), axis=0)
+# # monthly.rolling(window=12).mean().plot()
+# monthly.plot()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+# plt.xticks(rotation=45, ha="right")
+# plt.xlabel('Year')
+# plt.ylabel('Share of articles mentioning topic')
+# plt.show()
 
 
 from corextopic import corextopic as ct
 topic_model = ct.Corex(n_hidden=15)
-topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()) + ['locatiekeuze', 'plaatsvinden'], anchor_strength=3)
+topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()), anchor_strength=2)
 
 topics = topic_model.get_topics(n_words=30)
 for topic_n,topic in enumerate(topics):
@@ -219,23 +236,48 @@ for topic_n,topic in enumerate(topics):
     print(topic_str)
 
 from corextopic import vis_topic as vt
-vt.vis_rep(topic_model, column_label=words, prefix='topic-model-example')
-
+vt.vis_rep(topic_model, column_label=vocab, prefix='topic-model-example')
 
 import guidedlda
 
 model = guidedlda.GuidedLDA(n_topics=12, random_state=7, refresh=20)
 
+word2id = vec.vocabulary_
+
 seed_topics = {}
-for t_id, st in enumerate(seed_topic_list):
+for t_id, st in enumerate(topic_keywords.values()):
     for word in st:
         seed_topics[word2id[word]] = t_id
 
-model.fit(X, seed_topics=seed_topics, seed_confidence=0.15)
+model.fit(X.toarray(), seed_topics=seed_topics, seed_confidence=0.15)
 
+n_top_words = 10
+topic_word = model.topic_word_
+for i, topic_dist in enumerate(topic_word):
+    topic_words = np.array(vocab)[np.argsort(topic_dist)][:-(n_top_words+1):-1]
+    print('Topic {}: {}'.format(i, ' '.join(topic_words)))
 
+import pyLDAvis
 
+# calculate doc lengths as the sum of each row of the dtm
+tef_dtm = pd.DataFrame(X.toarray())
+doc_lengths = tef_dtm.sum(axis=1, skipna=True)
 
+# transpose the dtm and get a sum of the overall term frequency
+dtm_trans = tef_dtm.T
+dtm_trans['total'] = dtm_trans.sum(axis=1, skipna=True)
+
+# create a data dictionary as per this tutorial https://nbviewer.jupyter.org/github/bmabey/pyLDAvis/blob/master/notebooks/Movie%20Reviews%2C%20AP%20News%2C%20and%20Jeopardy.ipynb
+data = {'topic_term_dists':model.topic_word_, 'doc_topic_dists':model.doc_topic_, 'doc_lengths':doc_lengths, 'vocab':vocab, 'term_frequency':list(dtm_trans['total'])}
+
+# prepare the data
+tef_vis_data = pyLDAvis.prepare(**data)
+
+# this bit needs to be run after running the earlier code for reasons
+pyLDAvis.display(tef_vis_data)
+
+# save to HTML
+pyLDAvis.save_html(tef_vis_data, os.path.join(path, 'Plots', 'guided_lda_vis.html'))
 
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
