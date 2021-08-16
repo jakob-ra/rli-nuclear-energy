@@ -1,12 +1,7 @@
 import pandas as pd
 import os
-import re
 import spacy
 from sklearn.feature_extraction.text import CountVectorizer
-import gensim
-import gensim.corpora as corpora
-from gensim.models import CoherenceModel, KeyedVectors
-from gensim import matutils
 from wordfreq import top_n_list
 import numpy as np
 import pyLDAvis.gensim_models as gensimvis
@@ -15,6 +10,7 @@ import swifter
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from nltk import word_tokenize
+from corextopic import corextopic as ct
 
 mpl.rcParams['figure.dpi'] = 300
 mpl.rcParams['figure.autolayout'] = True
@@ -31,15 +27,10 @@ df = df.groupby('text').source.apply(list).reset_index().merge(
     df.drop(columns='source').drop_duplicates(subset=['text']), on='text')
 df['text'] = df.text.str.strip()
 
-# focus on paragraphs rather than whole articles
-# df['text'] = df.text.str.split('\n')
-# df = df.explode('text')
-# df.reset_index(inplace=True)
-# df = df[df.text.apply(len) > 15]
-
 # # Spacy lemmatization
 # # load Dutch model
-nlp = spacy.load("nl_core_news_sm", disable=['parser', 'ner'])
+nlp = spacy.load("nl_core_news_lg")
+# nlp = spacy.load("nl_core_news_lg", disable=['parser', 'ner'])
 
 def lemmatize(input_text: str, allowed_postags=['NOUN', 'ADJ', 'ADV']): # 'VERB'
     ''' Returns list of lemmatized tokens, filtering for stopwords and tokens shorter than 3 characters. '''
@@ -47,14 +38,6 @@ def lemmatize(input_text: str, allowed_postags=['NOUN', 'ADJ', 'ADV']): # 'VERB'
 
     return [token.lemma_ for token in doc if token.is_stop == False and len(token) > 2]
 
-# df['processed_text'] = df.text.swifter.apply(lemmatize)
-
-# def share_overlap(list_1, list_2):
-#     set_1, set_2 = set(list_1), set(list_2)
-#     len_overlap = len(set_1 & set_2)
-#     len_total = (len(set_1) + len(set_2))/2
-#
-#     return len_overlap/len_total
 
 # split into words
 df['processed_text'] = df.text.apply(word_tokenize)
@@ -71,10 +54,7 @@ df['processed_text'] = df.processed_text.apply(lambda x: [word for word in x if 
 # remove tokens shorter than three characters
 df['processed_text'] = df.processed_text.apply(lambda x: [elem for elem in x if len(elem)>2])
 
-# df.to_excel(os.path.join(path, 'rli-paragraphs-processed.xlsx'), index=False)
-
-# df.processed_text.explode().value_counts().head(50)
-
+# define stop words
 stop_words = ['kernenergie', 'kerncentral', 'nucleaire energie', 'nucleaire stroom', 'nucleaire elektriciteit', 'windmolens',
     'atoomenergie', 'atoomstroom', 'nucleair', 'kerncentrale', 'atoomcentrale', 'kernreactor', 'kerncentrales',
     'nucleaire centrale', 'atoomreactor', 'fossiel', 'schaliegas', 'waterstof', 'kolen', 'gas', 'aardgas',
@@ -93,36 +73,12 @@ remove_from_stop_words = ['miljoen', 'veiligheid', 'cost', 'europa', 'euro',
 remove_from_stop_words = remove_from_stop_words + [' '.join(lemmatize(x)) for x in remove_from_stop_words]
 stop_words = [item for item in stop_words if item not in remove_from_stop_words]
 
+# Count vectorization
 vec = CountVectorizer(min_df=5, ngram_range=(1,2), stop_words=stop_words, max_features=50000)
 X = vec.fit_transform(df.processed_text.apply(lambda x: ' '.join(x)))
 vocab = vec.get_feature_names()
 
-# corpus = matutils.Sparse2Corpus(X.T)
-# id2word = {v: k for k, v in vec.vocabulary_.items()}
-# d = corpora.Dictionary()
-# d.id2token = id2word
-# d.token2id = {v: k for k, v in id2word.items()}
-#
-# lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
-#                                            id2word=d,
-#                                            num_topics=15,
-#                                            random_state=2,
-#                                            update_every=1,
-#                                            passes=20,
-#                                            alpha='auto',
-#                                            eta=0.9,
-#                                            per_word_topics=False)
-#
-# lda_model.print_topics()
-#
-# vis = gensimvis.prepare(lda_model, corpus, d)
-# pyLDAvis.save_html(vis, os.path.join(path, 'Plots', 'lda_vis.html'))
-#
-# cm = CoherenceModel(model=lda_model, corpus=corpus, dictionary=d, coherence='u_mass')
-# cm.get_coherence()  # get coherence value
-
-# topics
-# broeikas graden duurzamheid duurzamheid duurzamheid zoutlaag kleilaag halveringstijd  ongeluk slachtoffer grafiet tritium waarde intergenerationeel middenoosten
+# Define seed words for anchored topic model
 topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzaam', 'uitstoot', 'hernieuwbaar',
                 'duurzaamheid', 'opwarmen', 'atmosfeer', 'temperatuurstijging', 'leefomgeving',
                 'energietransitie', 'emissie', 'opwarming', 'ipcc', 'duurzame',
@@ -159,125 +115,220 @@ topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzaam', 'uitstoot', '
         'Choice of site': ['groningen', 'zeeland', 'brabant', 'provincie', 'gemeente', 'borssele',
                            'eemshaven', 'maasvlakte', 'locatiekeuze', 'locaties', 'bouwlocaties']}
 
+# Unused: broeikas graden duurzamheid duurzamheid duurzamheid zoutlaag kleilaag halveringstijd  ongeluk slachtoffer grafiet tritium waarde intergenerationeel middenoosten
+
 # pretty print seed words
 for topic in topic_keywords:
     print(topic + ': ')
     print(', '.join(topic_keywords[topic]))
 
+## Some methods to extend the list of anchoring words
 # find similar words via co-occurence matrix
-Xc = (X.T * X)
-Xc = Xc.todense()
-co_occ = pd.DataFrame(Xc, columns=vocab, index=vocab)
-co_occ['bouwlocaties'].sort_values(ascending=False).head(60)
+# Xc = (X.T * X)
+# Xc = Xc.todense()
+# co_occ = pd.DataFrame(Xc, columns=vocab, index=vocab)
+# co_occ['bouwlocaties'].sort_values(ascending=False).head(60)
 
 # find similar words via pre-trained word2vec
-model = KeyedVectors.load_word2vec_format('C:/Users/Jakob/Downloads/wikipedia-160.txt')
-[x[0] for x in model.most_similar('energiezekerheid', topn=20)]
+# model = KeyedVectors.load_word2vec_format('C:/Users/Jakob/Downloads/wikipedia-160.txt')
+# [x[0] for x in model.most_similar('energiezekerheid', topn=20)]
 
 # example texts for keyword
-df[df.text.str.lower().str.contains('invest')].text
+# df[df.text.str.lower().str.contains('invest')].text
 
 # find keywords containing sub-phrase
-word_counts = pd.Series(X.toarray().sum(axis=0), index=vocab)
-word_counts[word_counts.index.str.contains('sancties')].sort_values(ascending=False).head(50)
+# word_counts = pd.Series(X.toarray().sum(axis=0), index=vocab)
+# word_counts[word_counts.index.str.contains('sancties')].sort_values(ascending=False).head(50)
 
-
-# def form_query(keyword_list: list):
-#     """ Returns regex query that matches on all keywords in the keyword list """
-#
-#     return '|'.join(keyword_list)
-#
-# # count occurences
-# for topic in topic_keywords:
-#     keywords = topic_keywords[topic]
-#     # search both lemmatized and unlemmatized text
-#     df[topic + '_matched'] = df.text.str.findall(form_query(topic_keywords[topic]), flags=re.I)
-#     df[topic + '_matched'] = df[topic + '_matched'] + df.processed_text.apply(lambda x: ' '.join(x)).str.findall(
-#             form_query(topic_keywords[topic]), flags=re.I)
-#
-# # example
-# df[df['locatiekeuze'].str.len() > 0].text.sample().values
-#
-#
-# def print_most_frequent(flag):
-#     value_counts = df[df[flag].str.len() > 0][flag].explode().str.lower().value_counts()
-#     for key, val in zip(value_counts.index, value_counts):
-#         print(key + ' ('+ str(val) + '),', end = ' ')
-#     print('\n')
-#     return
-#
-# for topic in topic_keywords:
-#     print(topic + ':', str(len(df[df[topic + '_matched'].str.len() > 0])) + ' articles')
-#     print_most_frequent(topic + '_matched')
-#
-# # dummy flag for topics
-# for topic in topic_keywords:
-#     df[topic] = df[topic + '_matched'].str.len() > 0
-#
-# monthly = df.groupby(df.date.dt.to_period('Y'))[list(topic_keywords.keys())].agg(sum)
-# monthly = monthly.div(df.groupby(df.date.dt.to_period('Y')).size(), axis=0)
-# # monthly.rolling(window=12).mean().plot()
-# monthly.plot()
-# plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-# plt.xticks(rotation=45, ha="right")
-# plt.xlabel('Year')
-# plt.ylabel('Share of articles mentioning topic')
-# plt.show()
-
-
-from corextopic import corextopic as ct
+# Fit anchored topic model
 topic_model = ct.Corex(n_hidden=15)
-topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()), anchor_strength=2)
+topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()), anchor_strength=10)
 
+# Pretty print top 30 words per topic
+topic_names = list(topic_keywords.keys())
 topics = topic_model.get_topics(n_words=30)
-for topic_n,topic in enumerate(topics):
+for topic_n,topic in enumerate(topics[:-6]):
     words, _, _ = zip(*topic)
-    topic_str = str(topic_n+1)+': '+','.join(words)
+    topic_str = topic_names[topic_n] +': '+', '.join(words)
     print(topic_str)
 
-from corextopic import vis_topic as vt
-vt.vis_rep(topic_model, column_label=vocab, prefix='topic-model-example')
 
-import guidedlda
+# # export topic model
+# topic_model.save(os.path.join(path, 'corex-topic-model.pkl'), ensure_compatibility=False)
 
-model = guidedlda.GuidedLDA(n_topics=12, random_state=7, refresh=20)
+# get topic predictions per article
+df_predictions = pd.DataFrame(topic_model.predict(X))
+df_predictions.drop(columns=df_predictions.columns[-6:], inplace=True) # drop predictions for sponge topics
+df_predictions.columns = topic_names
+df_predictions = df_predictions.merge(df, left_index=True, right_index=True)
 
-word2id = vec.vocabulary_
+# plot overall topic prevalence
+df_predictions[topic_names].sum().sort_values().plot(kind='barh')
+plt.xlabel('Number of articles')
+plt.ylabel('Topic')
+plt.show()
 
-seed_topics = {}
-for t_id, st in enumerate(topic_keywords.values()):
-    for word in st:
-        seed_topics[word2id[word]] = t_id
+# plot topic prevalence over time
+topic_predictions_plot = df_predictions[['date'] + topic_names].copy()  # groupby time period and sum
+topic_predictions_plot.set_index('date', inplace=True)
+topic_predictions_plot.sort_index(inplace=True)
+# topic_predictions_plot = topic_predictions_plot.rolling(window='365D', closed='both', min_periods=100).mean()
+topic_predictions_plot = topic_predictions_plot.ewm(halflife='365D', times=topic_predictions_plot.index, min_periods=100).mean()
+topic_predictions_plot = topic_predictions_plot.ewm(halflife='100D', times=topic_predictions_plot.index).mean()
+topic_predictions_plot.plot(colormap='Set1', figsize=(7,7))
+plt.xlabel('Year')
+plt.ylabel('Share of articles mentioning topic')
+plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
+plt.xticks(rotation=45, ha="right")
+plt.savefig(os.path.join(path, 'Plots', 'topic-prominence-over-time'))
+plt.show()
 
-model.fit(X.toarray(), seed_topics=seed_topics, seed_confidence=0.15)
+# plot topics per source
+source_topics = df_predictions[['source'] + topic_names]
+source_topics = source_topics.explode('source')
+source_topics = source_topics.groupby('source').sum().div(source_topics.groupby('source').size(), axis=0)
 
-n_top_words = 10
-topic_word = model.topic_word_
-for i, topic_dist in enumerate(topic_word):
-    topic_words = np.array(vocab)[np.argsort(topic_dist)][:-(n_top_words+1):-1]
-    print('Topic {}: {}'.format(i, ' '.join(topic_words)))
+source_topics.plot(figsize=(9,9), colormap='Set1', linestyle='None', marker='o', markersize=12, markeredgecolor='black')
+plt.xlabel('Source')
+plt.ylabel('Share of articles mentioning topic')
+plt.legend(bbox_to_anchor=(1, 1), loc='upper left', prop={'size': 14})
+plt.xticks([i for i in range(len(source_topics.index))], source_topics.index, rotation=45, ha='right')
+plt.savefig(os.path.join(path, 'Plots', 'topics-across-sources'))
+plt.show()
 
-import pyLDAvis
 
-# calculate doc lengths as the sum of each row of the dtm
-tef_dtm = pd.DataFrame(X.toarray())
-doc_lengths = tef_dtm.sum(axis=1, skipna=True)
+# predict topics on sentence level
+df_sentences = pd.read_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner.pkl'))
+df_sentences['processed_sentence'] = df_sentences.sentence.apply(word_tokenize)
 
-# transpose the dtm and get a sum of the overall term frequency
-dtm_trans = tef_dtm.T
-dtm_trans['total'] = dtm_trans.sum(axis=1, skipna=True)
+X_sent = vec.transform(df_sentences.processed_sentence.apply(lambda x: ' '.join(x)))
 
-# create a data dictionary as per this tutorial https://nbviewer.jupyter.org/github/bmabey/pyLDAvis/blob/master/notebooks/Movie%20Reviews%2C%20AP%20News%2C%20and%20Jeopardy.ipynb
-data = {'topic_term_dists':model.topic_word_, 'doc_topic_dists':model.doc_topic_, 'doc_lengths':doc_lengths, 'vocab':vocab, 'term_frequency':list(dtm_trans['total'])}
+df_sentences_predictions = pd.DataFrame(topic_model.predict(X_sent))
+df_sentences_predictions.drop(columns=df_sentences_predictions.columns[-6:], inplace=True) # drop predictions for sponge topics
+df_sentences_predictions.columns = topic_names
+df_sentences_predictions = df_sentences_predictions.merge(df_sentences, left_index=True, right_index=True)
 
-# prepare the data
-tef_vis_data = pyLDAvis.prepare(**data)
+# export
+df_sentences_predictions.to_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner-topics.pkl'))
 
-# this bit needs to be run after running the earlier code for reasons
-pyLDAvis.display(tef_vis_data)
+# plot average sentiment per topic
+topic_sent = df_sentences_predictions[topic_names].multiply(df_sentences_predictions['sentiment'], axis=0)
+topic_sent = topic_sent.sum()/(df_sentences_predictions[topic_names].sum())
+topic_sent.sort_values().plot(kind='barh')
+plt.xlabel('Average sentiment')
+plt.ylabel('Topic')
+plt.savefig(os.path.join(path, 'Plots', 'average-topic-sentiment'))
+plt.show()
 
-# save to HTML
-pyLDAvis.save_html(tef_vis_data, os.path.join(path, 'Plots', 'guided_lda_vis.html'))
+# plot average sentiment per topic over time
+topic_sent_time = df_sentences_predictions[['date', 'sentiment'] + topic_names].copy()
+topic_sent_time[topic_names] = topic_sent_time[topic_names].replace(False, np.nan)
+topic_sent_time[topic_names] = topic_sent_time[topic_names].multiply(topic_sent_time['sentiment'], axis=0)
+topic_sent_time[topic_names] = topic_sent_time[topic_names].apply(pd.to_numeric)
+# topic_sent_time = topic_sent_time.groupby(topic_sent_time.date.dt.to_period('Q'))[topic_names].mean()
+topic_sent_time.set_index('date', inplace=True)
+topic_sent_time.sort_index(inplace=True)
+# topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
+# topic_sent_time = topic_sent_time.groupby(topic_sent_time.index.to_period('M')).mean()
+topic_sent_time = topic_sent_time.ewm(halflife='365D', times=topic_sent_time.index)[topic_names].mean()
+topic_sent_time = topic_sent_time.reset_index().drop_duplicates(subset=['date'], keep='first').set_index('date')
+topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
+topic_sent_time.iloc[40:].plot(cmap='Set1', figsize=(7,7))
+plt.ylabel('Average topic sentiment')
+plt.xlabel('Year')
+plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
+plt.xticks(rotation=45, ha='right')
+plt.show()
+
+
+
+# average sentiment per source
+source_sent = df_sentences_predictions.groupby('source_agg').sentiment.mean().sort_values()
+source_sent.plot(kind='barh')
+plt.xlabel('Average sentiment')
+plt.ylabel('Source')
+plt.savefig(os.path.join(path, 'Plots', 'average-sentiment-across-sources'))
+plt.show()
+
+# average topic sentiment per source
+source_topic_sent = df_sentences_predictions[['source_agg', 'sentiment'] + topic_names].copy()
+source_topic_sent[topic_names] = source_topic_sent[topic_names].replace(False, np.nan)
+source_topic_sent[topic_names] = source_topic_sent[topic_names].multiply(source_topic_sent.sentiment, axis=0)
+source_topic_sent = source_topic_sent.explode('source_agg')
+source_topic_sent[topic_names] = source_topic_sent[topic_names].apply(pd.to_numeric)
+source_topic_sent = source_topic_sent.groupby('source_agg')[topic_names].mean()
+
+source_topic_sent.plot(figsize=(9,9), colormap='Set1', linestyle='None', marker='o', markersize=12, markeredgecolor='black')
+plt.xlabel('Source')
+plt.ylabel('Average sentiment for topic')
+plt.legend(bbox_to_anchor=(1, 1), loc='upper left', prop={'size': 14})
+plt.xticks([i for i in range(len(source_topics.index))], source_topics.index, rotation=45, ha='right')
+plt.savefig(os.path.join(path, 'Plots', 'topic-sentiment-across-sources'))
+plt.show()
+
+## top NER
+# top organizations
+def fix_orgs(found_orgs: list):
+    entities = []
+    for entity in found_orgs:
+        if 'Forum' in entity:
+            entities.append('Forum voor Democratie')
+            continue
+        if entity not in ['Klimaat', 'Kamer', 'kernenergie', 'Rijk', 'België', 'Belgi', 'Milieu']:
+            entities.append(entity)
+
+    return entities
+df_sentences_predictions['organizations'] = df_sentences_predictions.organizations.apply(fix_orgs)
+df_sentences_predictions.organizations.explode().value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
+plt.ylabel('Organisation')
+plt.xlabel('Number of mentions')
+plt.savefig(os.path.join(path, 'Plots', 'top-50-organizations'))
+plt.show()
+
+# top persons
+def fix_persons(found_orgs: list):
+    entities = []
+    for entity in found_orgs:
+        if entity == 'Franois Hollande':
+            entities.append('François Hollande')
+            continue
+        if entity not in ['Volt', 'Franciscus', 'Isral', 'God', 'Wubbo', 'Wise', 'Bie', 'De Bie']:
+            entities.append(entity)
+
+    return entities
+df_sentences_predictions['persons'] = df_sentences_predictions.persons.apply(fix_persons)
+
+def first_last_name_deduplication(all_persons: list):
+    first_and_last_names = []
+    for entity in all_persons:
+        if len(entity.split()) == 2:
+            first_and_last_names.append(entity)
+    name_dict = {}
+    for entity in all_persons:
+        if len(entity.split()) == 1:
+            for name in first_and_last_names:
+                if entity == name.split()[1] and name_dict.get(entity)==None:
+                        name_dict.update({entity: name})
+
+    return name_dict
+
+
+choices = df_sentences_predictions.persons.explode().dropna().unique()
+name_dict = first_last_name_deduplication(choices)
+
+df_sentences_predictions.persons.explode().replace(name_dict).value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
+plt.ylabel('Person')
+plt.xlabel('Number of mentions')
+plt.savefig(os.path.join(path, 'Plots', 'top-50-persons'))
+plt.show()
+
+
+
+
+
+
+
+
 
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
@@ -397,3 +448,153 @@ pyLDAvis.save_html(tef_vis_data, os.path.join(path, 'Plots', 'guided_lda_vis.htm
 # Technologie
 # Draagvlak
 # Continuering Borssele
+
+# LDA model
+# corpus = matutils.Sparse2Corpus(X.T)
+# id2word = {v: k for k, v in vec.vocabulary_.items()}
+# d = corpora.Dictionary()
+# d.id2token = id2word
+# d.token2id = {v: k for k, v in id2word.items()}
+#
+# lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
+#                                            id2word=d,
+#                                            num_topics=15,
+#                                            random_state=2,
+#                                            update_every=1,
+#                                            passes=20,
+#                                            alpha='auto',
+#                                            eta=0.9,
+#                                            per_word_topics=False)
+#
+# lda_model.print_topics()
+#
+# vis = gensimvis.prepare(lda_model, corpus, d)
+# pyLDAvis.save_html(vis, os.path.join(path, 'Plots', 'lda_vis.html'))
+#
+# cm = CoherenceModel(model=lda_model, corpus=corpus, dictionary=d, coherence='u_mass')
+# cm.get_coherence()  # get coherence value
+
+# focus on paragraphs rather than whole articles
+# df['text'] = df.text.str.split('\n')
+# df = df.explode('text')
+# df.reset_index(inplace=True)
+# df = df[df.text.apply(len) > 15]
+
+
+# lemmatize text
+# df['processed_text'] = df.text.swifter.apply(lemmatize)
+
+# calculate share of overlap for fuzzy deduplication
+# def share_overlap(list_1, list_2):
+#     set_1, set_2 = set(list_1), set(list_2)
+#     len_overlap = len(set_1 & set_2)
+#     len_total = (len(set_1) + len(set_2))/2
+#
+#     return len_overlap/len_total
+
+# def form_query(keyword_list: list):
+#     """ Returns regex query that matches on all keywords in the keyword list """
+#
+#     return '|'.join(keyword_list)
+#
+# # count occurences
+# for topic in topic_keywords:
+#     keywords = topic_keywords[topic]
+#     # search both lemmatized and unlemmatized text
+#     df[topic + '_matched'] = df.text.str.findall(form_query(topic_keywords[topic]), flags=re.I)
+#     df[topic + '_matched'] = df[topic + '_matched'] + df.processed_text.apply(lambda x: ' '.join(x)).str.findall(
+#             form_query(topic_keywords[topic]), flags=re.I)
+#
+# # example
+# df[df['locatiekeuze'].str.len() > 0].text.sample().values
+#
+#
+# def print_most_frequent(flag):
+#     value_counts = df[df[flag].str.len() > 0][flag].explode().str.lower().value_counts()
+#     for key, val in zip(value_counts.index, value_counts):
+#         print(key + ' ('+ str(val) + '),', end = ' ')
+#     print('\n')
+#     return
+#
+# for topic in topic_keywords:
+#     print(topic + ':', str(len(df[df[topic + '_matched'].str.len() > 0])) + ' articles')
+#     print_most_frequent(topic + '_matched')
+#
+# # dummy flag for topics
+# for topic in topic_keywords:
+#     df[topic] = df[topic + '_matched'].str.len() > 0
+#
+# monthly = df.groupby(df.date.dt.to_period('Y'))[list(topic_keywords.keys())].agg(sum)
+# monthly = monthly.div(df.groupby(df.date.dt.to_period('Y')).size(), axis=0)
+# # monthly.rolling(window=12).mean().plot()
+# monthly.plot()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+# plt.xticks(rotation=45, ha="right")
+# plt.xlabel('Year')
+# plt.ylabel('Share of articles mentioning topic')
+# plt.show()
+
+
+# # Corextopic visualization
+# from corextopic import vis_topic as vt
+# vt.vis_rep(topic_model, column_label=vocab, prefix='topic-model-example')
+#
+# ## Guided LDA solution (Corex topics are more coherent)
+# import guidedlda
+#
+# model = guidedlda.GuidedLDA(n_topics=9, random_state=7, refresh=20)
+#
+# word2id = vec.vocabulary_
+#
+# seed_topics = {}
+# for t_id, st in enumerate(topic_keywords.values()):
+#     for word in st:
+#         seed_topics[word2id[word]] = t_id
+#
+# model.fit(X.toarray(), seed_topics=seed_topics, seed_confidence=0.3)
+#
+# # pretty print topics
+# n_top_words = 10
+# topic_word = model.topic_word_
+# for i, topic_dist in enumerate(topic_word):
+#     topic_words = np.array(vocab)[np.argsort(topic_dist)][:-(n_top_words+1):-1]
+#     print('Topic {}: {}'.format(i, ' '.join(topic_words)))
+#
+# ## Guided LDA vis
+# import pyLDAvis
+#
+# # calculate doc lengths as the sum of each row of the dtm
+# tef_dtm = pd.DataFrame(X.toarray())
+# doc_lengths = tef_dtm.sum(axis=1, skipna=True)
+#
+# # transpose the dtm and get a sum of the overall term frequency
+# dtm_trans = tef_dtm.T
+# dtm_trans['total'] = dtm_trans.sum(axis=1, skipna=True)
+#
+# # create a data dictionary as per this tutorial https://nbviewer.jupyter.org/github/bmabey/pyLDAvis/blob/master/notebooks/Movie%20Reviews%2C%20AP%20News%2C%20and%20Jeopardy.ipynb
+# data = {'topic_term_dists':model.topic_word_, 'doc_topic_dists':model.doc_topic_, 'doc_lengths':doc_lengths, 'vocab':vocab, 'term_frequency':list(dtm_trans['total'])}
+#
+# # prepare the data
+# tef_vis_data = pyLDAvis.prepare(**data)
+#
+# # this bit needs to be run after running the earlier code for reasons
+# pyLDAvis.display(tef_vis_data)
+#
+# # save to HTML
+# pyLDAvis.save_html(tef_vis_data, os.path.join(path, 'Plots', 'guided_lda_vis.html'))
+
+# topic_predictions_plot = df_predictions.groupby(df_predictions.date.dt.to_period('Y'))[topic_names].sum() # groupby time period and sum
+# # divide by total in each perido to get share of articles mentioning topic
+# topic_predictions_plot = topic_predictions_plot.div(df_predictions.groupby(df_predictions.date.dt.to_period('Y')).size(), axis=0)
+# # topic_predictions_plot = topic_predictions_plot.rolling(window=6).mean() # smooth via rolling average#
+# # topic_predictions_plot = topic_predictions_plot.rolling(window=6, win_type='gaussian', center=True).mean(std=50)
+# # resample and interpolate to smooth curves
+# # topic_predictions_plot = topic_predictions_plot.resample('M', kind='timestamp').mean()
+# # topic_predictions_plot = topic_predictions_plot.interpolate(method='cubicspline')
+# topic_predictions_plot.plot(colormap='Set1', figsize=(7,7))
+# plt.xlabel('Year')
+# plt.ylabel('Share of articles')
+# plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
+# plt.ylim(ymin=0)
+# plt.xticks(rotation=45, ha="right")
+# plt.show()

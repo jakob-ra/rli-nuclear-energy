@@ -37,6 +37,21 @@ df.loc[df.source_agg.str.contains('Limburg'), 'source_agg'] = 'Dagblad de Limbur
 
 df.to_excel(os.path.join(path, 'rli-articles-clean.xlsx'), index=False)
 
+df.drop_duplicates(subset=['text', 'source'], inplace=True) # drop articles with same text and source
+df['text'] = df.text.str.strip() # remove filler spaces
+
+df['sentence'] = df.text.apply(tokenize.sent_tokenize) # divide into sentences
+df = df.explode('sentence')
+df['sentence'] = df.sentence.str.split('\n') # also split on new lines
+df = df.explode('sentence')
+
+df.reset_index(inplace=True)
+
+df['sentence'] = df.sentence.str.replace(r"[^äüöáéíóúàèëï.a-zA-Z\d\_]+", "") # remove weird characters
+
+# export
+df.to_pickle(os.path.join(path, 'rli-sentences.pkl'))
+
 
 # df['byline'] = '' # byline does not always exist
 # df.loc[df.raw.str.contains('Byline:'), 'byline'] = df.raw[df.raw.str.contains('Byline:')].apply(lambda x: x.split('Byline: ')[1])
