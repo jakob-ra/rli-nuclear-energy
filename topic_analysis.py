@@ -46,7 +46,7 @@ df['processed_text'] = df.text.apply(word_tokenize)
 df['processed_text'] = df.processed_text.apply(lambda x: ' '.join(x))
 df = df.groupby('processed_text').source.apply(sum).reset_index().merge(
     df.drop(columns='source').drop_duplicates(subset=['processed_text']), on='processed_text')
-df['processed_text'] = df.processed_text.str.split()
+df['processed_text'] = df.processed_text.apply(word_tokenize)
 
 # remove non alphanumerical tokens
 df['processed_text'] = df.processed_text.apply(lambda x: [word for word in x if word.isalnum()])
@@ -144,16 +144,32 @@ for topic in topic_keywords:
 topic_model = ct.Corex(n_hidden=15)
 topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()), anchor_strength=10)
 
-# Pretty print top 30 words per topic
+## Pretty print top n words per topic
 topic_names = list(topic_keywords.keys())
-topics = topic_model.get_topics(n_words=30)
-for topic_n,topic in enumerate(topics[:-6]):
-    words, _, _ = zip(*topic)
-    topic_str = topic_names[topic_n] +': '+', '.join(words)
-    print(topic_str)
+topics = topic_model.get_topics(n_words=100)
+topics_res = []
+for topic_n,topic in enumerate(topics[:-6]): # [:-6] so we don't print sponge topics
+    words, mis, signs = zip(*topic)
+    # topic_str = topic_names[topic_n] +': '+', '.join([word for word in words if not word in ['eric']])
+    # print(topic_str)
+    # print words above mutual information score threshold
+    # print('\n' + topic_names[topic_n] + ': ')
+    for word_n, word in enumerate(words):
+        topics_res.append([word, mis[word_n], topic_names[topic_n]])
+        # if mis[word_n] > 0.209:
+        #     print(word, '(' + str(mis[word_n]) + ')', end=', ')
 
+topics_res = pd.DataFrame(topics_res, columns=['word', 'mis', 'topic'])
+topics_res['voc_id'] = topics_res.word.apply(lambda x: vec.vocabulary_[x])
+topics_res['num_hits'] = topics_res.voc_id.apply(lambda x: X.T[x].sum())
+topics_res['anchor'] = topics_res.word.apply(lambda x: x in [item for sublist in list(topic_keywords.values()) for item in sublist])
+for topic in topic_names:
+    topic_res = topics_res[topics_res.topic == topic]
+    print('\n' + topic + ': ')
+    for index, row in topic_res.iterrows():
+        print(row['word'] + str(['*' if row['anchor'] else ''][0]) + ' (' + str(row['num_hits']) + ')', end=', ')
 
-# # export topic model
+# export topic model
 # topic_model.save(os.path.join(path, 'corex-topic-model.pkl'), ensure_compatibility=False)
 
 # get topic predictions per article
@@ -162,46 +178,13 @@ df_predictions.drop(columns=df_predictions.columns[-6:], inplace=True) # drop pr
 df_predictions.columns = topic_names
 df_predictions = df_predictions.merge(df, left_index=True, right_index=True)
 
-# plot overall topic prevalence
-df_predictions[topic_names].sum().sort_values().plot(kind='barh')
-plt.xlabel('Number of articles')
-plt.ylabel('Topic')
-plt.show()
-
-# plot topic prevalence over time
-topic_predictions_plot = df_predictions[['date'] + topic_names].copy()  # groupby time period and sum
-topic_predictions_plot.set_index('date', inplace=True)
-topic_predictions_plot.sort_index(inplace=True)
-# topic_predictions_plot = topic_predictions_plot.rolling(window='365D', closed='both', min_periods=100).mean()
-topic_predictions_plot = topic_predictions_plot.ewm(halflife='365D', times=topic_predictions_plot.index, min_periods=100).mean()
-topic_predictions_plot = topic_predictions_plot.ewm(halflife='100D', times=topic_predictions_plot.index).mean()
-topic_predictions_plot.plot(colormap='Set1', figsize=(7,7))
-plt.xlabel('Year')
-plt.ylabel('Share of articles mentioning topic')
-plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
-plt.xticks(rotation=45, ha="right")
-plt.savefig(os.path.join(path, 'Plots', 'topic-prominence-over-time'))
-plt.show()
-
-# plot topics per source
-source_topics = df_predictions[['source'] + topic_names]
-source_topics = source_topics.explode('source')
-source_topics = source_topics.groupby('source').sum().div(source_topics.groupby('source').size(), axis=0)
-
-source_topics.plot(figsize=(9,9), colormap='Set1', linestyle='None', marker='o', markersize=12, markeredgecolor='black')
-plt.xlabel('Source')
-plt.ylabel('Share of articles mentioning topic')
-plt.legend(bbox_to_anchor=(1, 1), loc='upper left', prop={'size': 14})
-plt.xticks([i for i in range(len(source_topics.index))], source_topics.index, rotation=45, ha='right')
-plt.savefig(os.path.join(path, 'Plots', 'topics-across-sources'))
-plt.show()
-
+# export
+df_predictions.to_pickle(os.path.join(path, 'rli-articles-with-topic-predictions.pkl'))
 
 # predict topics on sentence level
 df_sentences = pd.read_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner.pkl'))
-df_sentences['processed_sentence'] = df_sentences.sentence.apply(word_tokenize)
 
-X_sent = vec.transform(df_sentences.processed_sentence.apply(lambda x: ' '.join(x)))
+X_sent = vec.transform(df_sentences.sentence)
 
 df_sentences_predictions = pd.DataFrame(topic_model.predict(X_sent))
 df_sentences_predictions.drop(columns=df_sentences_predictions.columns[-6:], inplace=True) # drop predictions for sponge topics
@@ -210,117 +193,6 @@ df_sentences_predictions = df_sentences_predictions.merge(df_sentences, left_ind
 
 # export
 df_sentences_predictions.to_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner-topics.pkl'))
-
-# plot average sentiment per topic
-topic_sent = df_sentences_predictions[topic_names].multiply(df_sentences_predictions['sentiment'], axis=0)
-topic_sent = topic_sent.sum()/(df_sentences_predictions[topic_names].sum())
-topic_sent.sort_values().plot(kind='barh')
-plt.xlabel('Average sentiment')
-plt.ylabel('Topic')
-plt.savefig(os.path.join(path, 'Plots', 'average-topic-sentiment'))
-plt.show()
-
-# plot average sentiment per topic over time
-topic_sent_time = df_sentences_predictions[['date', 'sentiment'] + topic_names].copy()
-topic_sent_time[topic_names] = topic_sent_time[topic_names].replace(False, np.nan)
-topic_sent_time[topic_names] = topic_sent_time[topic_names].multiply(topic_sent_time['sentiment'], axis=0)
-topic_sent_time[topic_names] = topic_sent_time[topic_names].apply(pd.to_numeric)
-# topic_sent_time = topic_sent_time.groupby(topic_sent_time.date.dt.to_period('Q'))[topic_names].mean()
-topic_sent_time.set_index('date', inplace=True)
-topic_sent_time.sort_index(inplace=True)
-# topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
-# topic_sent_time = topic_sent_time.groupby(topic_sent_time.index.to_period('M')).mean()
-topic_sent_time = topic_sent_time.ewm(halflife='365D', times=topic_sent_time.index)[topic_names].mean()
-topic_sent_time = topic_sent_time.reset_index().drop_duplicates(subset=['date'], keep='first').set_index('date')
-topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
-topic_sent_time.iloc[40:].plot(cmap='Set1', figsize=(7,7))
-plt.ylabel('Average topic sentiment')
-plt.xlabel('Year')
-plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
-plt.xticks(rotation=45, ha='right')
-plt.show()
-
-
-
-# average sentiment per source
-source_sent = df_sentences_predictions.groupby('source_agg').sentiment.mean().sort_values()
-source_sent.plot(kind='barh')
-plt.xlabel('Average sentiment')
-plt.ylabel('Source')
-plt.savefig(os.path.join(path, 'Plots', 'average-sentiment-across-sources'))
-plt.show()
-
-# average topic sentiment per source
-source_topic_sent = df_sentences_predictions[['source_agg', 'sentiment'] + topic_names].copy()
-source_topic_sent[topic_names] = source_topic_sent[topic_names].replace(False, np.nan)
-source_topic_sent[topic_names] = source_topic_sent[topic_names].multiply(source_topic_sent.sentiment, axis=0)
-source_topic_sent = source_topic_sent.explode('source_agg')
-source_topic_sent[topic_names] = source_topic_sent[topic_names].apply(pd.to_numeric)
-source_topic_sent = source_topic_sent.groupby('source_agg')[topic_names].mean()
-
-source_topic_sent.plot(figsize=(9,9), colormap='Set1', linestyle='None', marker='o', markersize=12, markeredgecolor='black')
-plt.xlabel('Source')
-plt.ylabel('Average sentiment for topic')
-plt.legend(bbox_to_anchor=(1, 1), loc='upper left', prop={'size': 14})
-plt.xticks([i for i in range(len(source_topics.index))], source_topics.index, rotation=45, ha='right')
-plt.savefig(os.path.join(path, 'Plots', 'topic-sentiment-across-sources'))
-plt.show()
-
-## top NER
-# top organizations
-def fix_orgs(found_orgs: list):
-    entities = []
-    for entity in found_orgs:
-        if 'Forum' in entity:
-            entities.append('Forum voor Democratie')
-            continue
-        if entity not in ['Klimaat', 'Kamer', 'kernenergie', 'Rijk', 'België', 'Belgi', 'Milieu']:
-            entities.append(entity)
-
-    return entities
-df_sentences_predictions['organizations'] = df_sentences_predictions.organizations.apply(fix_orgs)
-df_sentences_predictions.organizations.explode().value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
-plt.ylabel('Organisation')
-plt.xlabel('Number of mentions')
-plt.savefig(os.path.join(path, 'Plots', 'top-50-organizations'))
-plt.show()
-
-# top persons
-def fix_persons(found_orgs: list):
-    entities = []
-    for entity in found_orgs:
-        if entity == 'Franois Hollande':
-            entities.append('François Hollande')
-            continue
-        if entity not in ['Volt', 'Franciscus', 'Isral', 'God', 'Wubbo', 'Wise', 'Bie', 'De Bie']:
-            entities.append(entity)
-
-    return entities
-df_sentences_predictions['persons'] = df_sentences_predictions.persons.apply(fix_persons)
-
-def first_last_name_deduplication(all_persons: list):
-    first_and_last_names = []
-    for entity in all_persons:
-        if len(entity.split()) == 2:
-            first_and_last_names.append(entity)
-    name_dict = {}
-    for entity in all_persons:
-        if len(entity.split()) == 1:
-            for name in first_and_last_names:
-                if entity == name.split()[1] and name_dict.get(entity)==None:
-                        name_dict.update({entity: name})
-
-    return name_dict
-
-
-choices = df_sentences_predictions.persons.explode().dropna().unique()
-name_dict = first_last_name_deduplication(choices)
-
-df_sentences_predictions.persons.explode().replace(name_dict).value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
-plt.ylabel('Person')
-plt.xlabel('Number of mentions')
-plt.savefig(os.path.join(path, 'Plots', 'top-50-persons'))
-plt.show()
 
 
 
