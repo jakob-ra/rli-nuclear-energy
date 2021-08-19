@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
+import networkx as nx
 
 mpl.rcParams['figure.dpi'] = 300
 mpl.rcParams['figure.autolayout'] = True
@@ -12,6 +13,8 @@ path = 'C:/Users/Jakob/Documents/RLI Nuclear Energy'
 
 # import sentence-level results
 df_sentences_predictions = pd.read_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner-topics.pkl'))
+
+df_sentences_predictions.drop_duplicates(['sentence', 'text', 'source_agg'], inplace=True) # remove duplicates
 
 topic_names = ['Climate impact', 'Waste and storage', 'Geopolitics', 'Safety', 'Cost',
        'Technology', 'Ethics', 'Politics', 'Choice of site']
@@ -31,9 +34,7 @@ topic_names = ['Climate impact', 'Waste and storage', 'Geopolitics', 'Safety', '
 # # # plt.savefig(os.path.join(path, 'Plots', 'topic-prominence-over-time-sentences'))
 # # plt.show()
 
-df_sentences_predictions[topic_names].sum()
 
-df_sentences_predictions.columns
 # plot average sentiment per topic
 topic_sent = df_sentences_predictions[topic_names].multiply(df_sentences_predictions['sentiment'], axis=0)
 topic_sent = topic_sent.sum()/(df_sentences_predictions[topic_names].sum())
@@ -88,6 +89,7 @@ plt.xticks([i for i in range(len(source_topic_sent.index))], source_topic_sent.i
 plt.savefig(os.path.join(path, 'Plots', 'topic-sentiment-across-sources'))
 plt.show()
 
+
 ## top NER
 # top organizations
 def fix_orgs(found_entities: list):
@@ -99,13 +101,22 @@ def fix_orgs(found_entities: list):
         if entity == 'EU':
             entities.append('Europese Unie')
             continue
+        if entity == 'Europese Unie EU':
+            entities.append('Europese Unie')
+            continue
         if entity == 'CU':
             entities.append('ChristenUnie')
             continue
         if entity == 'Commissie':
             entities.append('Europese Commissie')
             continue
-        if entity not in ['Klimaat', 'Kamer', 'kernenergie', 'Rijk', 'België', 'Belgi', 'Milieu']:
+        if entity == 'CDUCSU':
+            entities.append('CDU')
+            continue
+        if entity == 'CDU CSU':
+            entities.append('CDU')
+            continue
+        if entity not in ['milieu', 'CO2', 'CO', 'kernenergie', 'Klimaat', 'Kamer', 'kernenergie', 'Rijk', 'België', 'Belgi', 'Milieu']:
             entities.append(entity)
 
     return entities
@@ -123,6 +134,9 @@ def fix_persons(found_entities: list):
         if entity == 'Franois Hollande':
             entities.append('François Hollande')
             continue
+        if entity == 'Franois Mitterrand':
+            entities.append('François Mitterrand')
+            continue
         if entity == 'Bie':
             entities.append('Eric de Bie')
             continue
@@ -138,12 +152,14 @@ def fix_persons(found_entities: list):
         if entity == 'Leen':
             entities.append('Jan Leen Kloosterman')
             continue
+        if entity == 'Arjan Lubach':
+            entities.append('Arjen Lubach')
+            continue
         if entity not in ['Volt', 'Franciscus', 'Isral', 'God', 'Wubbo', 'Wise']:
             entities.append(entity)
 
     return entities
 
-entities[entities.index.str.contains('Kloosterman')]
 df_sentences_predictions['persons'] = df_sentences_predictions.persons.apply(fix_persons)
 
 def first_last_name_deduplication(all_persons: list):
@@ -184,6 +200,10 @@ entities = entities[entities.index.map(lambda x: x not in newspaper_names)] # re
 
 entity_names = list(entities.index)
 
+#### do NER network on article level COMMENT OUT IF NOT WANTED
+# df_sentences_predictions = df_sentences_predictions.explode('entities').dropna(subset=['entities'])
+# df_sentences_predictions.groupby(['text', 'source_agg']).entities.apply(list).reset_index(drop=True)
+
 res = df_sentences_predictions.entities.explode().dropna()
 res = res[res.apply(lambda x: x in entity_names)]
 
@@ -198,11 +218,16 @@ for index, item in res.iteritems():
 
 # find topic loading for each entity
 entity_topic_loadings = df_sentences_predictions.explode('entities').groupby('entities')[topic_names].mean()
-# entity_topic_loadings = entity_topic_loadings.iloc[entity_topic_loadings.sum(axis=1).to_numpy().nonzero()[0].tolist()]
-entity_dom_topic = entity_topic_loadings.T.idxmax()
-# entity_dom_topic = pd.DataFrame(index=entities.index).merge(pd.DataFrame(entity_dom_topic), left_index=True, right_index=True, how='left').squeeze()
+entity_dom_topic = entity_topic_loadings.T.idxmax() # find dominant topic
 
-import networkx as nx
+# find average sentiment per entity
+entity_sentiment = df_sentences_predictions.explode('entities').dropna(subset=['entities']).groupby('entities').sentiment.mean()
+
+# find mentions by source per entity
+entity_source_mentions = pd.get_dummies(df_sentences_predictions.explode('entities').dropna(subset=['entities']).set_index('entities').source_agg)
+entity_source_mentions = entity_source_mentions.groupby('entities').sum()
+
+# load into NetworkX
 G = nx.from_pandas_adjacency(entities_co_occ)
 
 # remove all isolates from G
@@ -216,17 +241,21 @@ for component in list(nx.connected_components(G)):
 
 G.nodes(data=True)
 for n, data in G.nodes(data=True):
-    data['size'] = entities[entities.index == n].values[0]
-    data['topic'] = str(entity_dom_topic.loc[n])
-    data['topic_loadings'] = str(entity_topic_loadings.loc[n].sort_values(ascending=False))
+    data['Number of mentions'] = entities[entities.index == n].values[0]
+    data['Dominant topic'] = str(entity_dom_topic.loc[n])
+    entity_topic_loading = entity_topic_loadings.loc[n]
+    entity_topic_loading = entity_topic_loading.sort_values(ascending=False).replace(0, np.nan).dropna() # sort and drop 0s
+    data['Topic loadings'] = ', '.join([topic + ': ' + '{:.3f}'.format(loading) for topic, loading in entity_topic_loading.iteritems()])
+    data['Average sentiment'] = entity_sentiment.loc[n]
+    mentions_in_source = entity_source_mentions.loc['Tesla']
+    mentions_in_source = mentions_in_source.sort_values(ascending=False).replace(0, np.nan).dropna() # sort and drop 0s
+    data['Mentions in source'] = ', '.join([source + ': ' + str(int(mentions)) for source, mentions in mentions_in_source.iteritems()])
 
 # export to Gephi
 nx.readwrite.graphml.write_graphml(G, path=os.path.join(path, 'rli-entity-network.graphml'))
 
-
 # from netwulf import visualize
 # visualize(G)
-
 
 
 # import nx_altair as nxa
