@@ -30,7 +30,6 @@ df['text'] = df.text.str.strip()
 # # Spacy lemmatization
 # # load Dutch model
 nlp = spacy.load("nl_core_news_lg")
-# nlp = spacy.load("nl_core_news_lg", disable=['parser', 'ner'])
 
 def lemmatize(input_text: str, allowed_postags=['NOUN', 'ADJ', 'ADV']): # 'VERB'
     ''' Returns list of lemmatized tokens, filtering for stopwords and tokens shorter than 3 characters. '''
@@ -54,7 +53,8 @@ df['processed_text'] = df.processed_text.apply(lambda x: [word for word in x if 
 # remove tokens shorter than three characters
 df['processed_text'] = df.processed_text.apply(lambda x: [elem for elem in x if len(elem)>2])
 
-# define stop words
+## define stop words (which are taken out of the analyis)
+# stop words related to energy sources
 stop_words = ['kernenergie', 'kerncentral', 'nucleaire energie', 'nucleaire stroom', 'nucleaire elektriciteit', 'windmolens',
     'atoomenergie', 'atoomstroom', 'nucleair', 'kerncentrale', 'atoomcentrale', 'kernreactor', 'kerncentrales',
     'nucleaire centrale', 'atoomreactor', 'fossiel', 'schaliegas', 'waterstof', 'kolen', 'gas', 'aardgas',
@@ -62,7 +62,8 @@ stop_words = ['kernenergie', 'kerncentral', 'nucleaire energie', 'nucleaire stro
     'zonnepanel', 'zonne', 'zonnecel', 'biomassa', 'bruinkool', 'windpark', 'windturbine',
     'zonneenergie', 'molen', 'kolencentrales', 'zonneparken', 'zonneweide']
 stop_words = stop_words + [' '.join(lemmatize(x)) for x in stop_words]
-stop_words += top_n_list('nl', 2000)
+stop_words += top_n_list('nl', 2000) # add the 2000 most common words in Dutch
+# remove relevant words
 remove_from_stop_words = ['miljoen', 'veiligheid', 'cost', 'europa', 'euro',
     'leeftijd', 'organisatie', 'nationale','inwoners', 'president', 'politiek', 'project', 'staten',
     'europese', 'omgeving', 'internationale','politieke', 'partijen', 'universiteit', 'kiezen', 'ziekenhuis',
@@ -74,11 +75,12 @@ remove_from_stop_words = remove_from_stop_words + [' '.join(lemmatize(x)) for x 
 stop_words = [item for item in stop_words if item not in remove_from_stop_words]
 
 # Count vectorization
-vec = CountVectorizer(min_df=5, ngram_range=(1,2), stop_words=stop_words, max_features=50000)
+vec = CountVectorizer(min_df=5, ngram_range=(1,2), stop_words=stop_words, max_features=50000) # use bigrams
 X = vec.fit_transform(df.processed_text.apply(lambda x: ' '.join(x)))
 vocab = vec.get_feature_names()
 
-# Define seed words for anchored topic model
+## Anchored topic model
+# Define seed words
 topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzaam', 'uitstoot', 'hernieuwbaar',
                 'duurzaamheid', 'opwarmen', 'atmosfeer', 'temperatuurstijging', 'leefomgeving',
                 'energietransitie', 'emissie', 'opwarming', 'ipcc', 'duurzame',
@@ -117,12 +119,12 @@ topic_keywords = {'Climate impact': ['klimaat', 'co2', 'duurzaam', 'uitstoot', '
 
 # Unused: broeikas graden duurzamheid duurzamheid duurzamheid zoutlaag kleilaag halveringstijd  ongeluk slachtoffer grafiet tritium waarde intergenerationeel middenoosten
 
-# pretty print seed words
+# print seed words
 for topic in topic_keywords:
     print(topic + ': ')
     print(', '.join(topic_keywords[topic]))
 
-## Some methods to extend the list of anchoring words
+## Some methods used to extend the list of anchoring words
 # find similar words via co-occurence matrix
 # Xc = (X.T * X)
 # Xc = Xc.todense()
@@ -141,10 +143,10 @@ for topic in topic_keywords:
 # word_counts[word_counts.index.str.contains('sancties')].sort_values(ascending=False).head(50)
 
 # Fit anchored topic model
-topic_model = ct.Corex(n_hidden=15)
+topic_model = ct.Corex(n_hidden=15) # using 6 un-anchored topics
 topic_model.fit(X, words=vocab, anchors=list(topic_keywords.values()), anchor_strength=10)
 
-## Pretty print top n words per topic
+# print top n words per topic
 topic_names = list(topic_keywords.keys())
 topics = topic_model.get_topics(n_words=100)
 topics_res = []
@@ -201,7 +203,7 @@ df_sentences_predictions.to_pickle(os.path.join(path, 'rli-sentence-translation-
 
 
 
-
+## Unused code
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
 # vec = TfidfVectorizer(min_df=5, ngram_range=(1,2), stop_words=stop_words, max_features=10000)

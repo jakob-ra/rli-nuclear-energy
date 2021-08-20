@@ -1,3 +1,5 @@
+## This recreates the (unguided) topic model visualization first presented
+
 import pandas as pd
 import os
 import spacy
@@ -85,49 +87,4 @@ print('\nPerplexity: ', lda_model.log_perplexity(corpus))  # a measure of how go
 
 vis = gensimvis.prepare(lda_model, corpus, d)
 pyLDAvis.save_html(vis, os.path.join(path, 'Plots', 'lda_vis.html'))
-
-# texts = doc_list
-#
-# # Count word frequencies
-# from collections import defaultdict
-# frequency = defaultdict(int)
-# for text in texts:
-#     for token in text:
-#         frequency[token] += 1
-#
-# # Only keep words that appear more than once
-# processed_corpus = [[token for token in text if frequency[token] > 1] for text in texts]
-#
-# # Creates, which is a mapping of word IDs to words.
-# words = corpora.Dictionary(processed_corpus)
-#
-# # Turns each document into a bag of words.
-# corpus = [words.doc2bow(doc) for doc in processed_corpus]
-#
-# bigram = Phrases(corpus, min_count=1, threshold=3,delimiter=b' ')
-#
-# bigram_phraser = Phraser(bigram)
-#
-# bigram_token = []
-# for doc in corpus:
-#     bigram_token.append(bigram_phraser[doc])
-
-# Klimaatimpact
-# Milieuimpact
-# Kennisinfrastructuur
-# Energiezekerheid
-# Veiligheid
-# Kernafval
-# Kernreactoren als transitietechnologie
-# Rol kernenergie in energiesysteem
-# Geopolitiek
-# Intergenerationeel
-# Opbouw nucleaire industrie
-# Ruimtelijke impact: lokatiekeuze
-# Financiering kosten bouw
-# Business case
-# Besluitvormingsproces
-# Technologie
-# Draagvlak
-# Continuering Borssele
 

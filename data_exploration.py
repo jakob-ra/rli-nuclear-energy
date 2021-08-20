@@ -1,3 +1,5 @@
+## Creates plots for articles by source, articles of time, article length, and wordcloud
+
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pandas as pd

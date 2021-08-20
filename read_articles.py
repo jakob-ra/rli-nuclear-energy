@@ -52,7 +52,6 @@ df['sentence'] = df.sentence.str.replace(r"[^äüöáéíóúàèëï.a-zA-Z\d\_
 # export
 df.to_pickle(os.path.join(path, 'rli-sentences.pkl'))
 
-
 # df['byline'] = '' # byline does not always exist
 # df.loc[df.raw.str.contains('Byline:'), 'byline'] = df.raw[df.raw.str.contains('Byline:')].apply(lambda x: x.split('Byline: ')[1])
 # df.loc[df.byline != '', 'byline'] = df[df.byline != ''].byline.apply(lambda x: x.split('\n')[0])
