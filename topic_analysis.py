@@ -124,6 +124,7 @@ for topic in topic_keywords:
     print(topic + ': ')
     print(', '.join(topic_keywords[topic]))
 
+topic_keywords.keys()
 ## Some methods used to extend the list of anchoring words
 # find similar words via co-occurence matrix
 # Xc = (X.T * X)

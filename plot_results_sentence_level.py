@@ -12,15 +12,15 @@ mpl.style.use('ggplot')
 path = 'C:/Users/Jakob/Documents/RLI Nuclear Energy'
 
 # import sentence-level results
-df_sentences_predictions = pd.read_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner-topics.pkl'))
+df = pd.read_pickle(os.path.join(path, 'rli-sentence-translation-sentiment-ner-topics.pkl'))
 
-df_sentences_predictions.drop_duplicates(['sentence', 'text', 'source_agg'], inplace=True) # remove duplicates
+df.drop_duplicates(['sentence', 'text', 'source_agg'], inplace=True) # remove duplicates
 
 topic_names = ['Climate impact', 'Waste and storage', 'Geopolitics', 'Safety', 'Cost',
        'Technology', 'Ethics', 'Politics', 'Choice of site']
 
 # plot topic prominence in number of sentences
-# topic_prominence = df_sentences_predictions[['date'] + topic_names].copy()
+# topic_prominence = df[['date'] + topic_names].copy()
 # # topic_prominence.set_index('date', inplace=True)
 # # topic_prominence.sort_index(inplace=True)
 # # topic_prominence = topic_prominence.rolling(window='1000D', closed='both', min_periods=4000).mean()
@@ -36,16 +36,40 @@ topic_names = ['Climate impact', 'Waste and storage', 'Geopolitics', 'Safety', '
 
 
 # plot average sentiment per topic
-topic_sent = df_sentences_predictions[topic_names].multiply(df_sentences_predictions['sentiment'], axis=0)
-topic_sent = topic_sent.sum()/(df_sentences_predictions[topic_names].sum())
+topic_sent = df[topic_names].multiply(df['sentiment'], axis=0)
+topic_sent = topic_sent.sum()/(df[topic_names].sum())
 topic_sent.sort_values().plot(kind='barh')
 plt.xlabel('Average sentiment')
 plt.ylabel('Topic')
 plt.savefig(os.path.join(path, 'Plots', 'average-topic-sentiment'))
 plt.show()
 
+# plot average sentiment over time
+# nuclear_keywords = ['kern', 'nucl', 'atoom']
+# sent_time = df[df.sentence.str.lower().str.contains('|'.join(nuclear_keywords))]
+sent_time = df[df.sentiment != 0].copy()
+# sent_time = sent_time.groupby(df.date.dt.to_period('M')).sentiment.mean()
+sent_time.set_index('date', inplace=True)
+sent_time.sort_index(inplace=True)
+sent_time = sent_time.rolling(window='700D', closed='both', min_periods=1000).sentiment.mean()
+sent_time.plot()
+plt.ylabel('Article sentiment (moving average)')
+plt.xlabel('Year')
+plt.savefig(os.path.join(path, 'Plots', 'average-sentiment-over-time'))
+plt.show()
+
+# df[(df.date.dt.to_period('Y').apply(str).isin(['2015', '2014', '2016'])) & (df.sentiment == -1)].translated_text
+#
+# df['translated_text'] = df.translated_text.apply(str)
+# df = df.merge(df.groupby('text', as_index=False).agg({'sentiment': 'mean', 'translated_text': 'sum'}).sort_values(by='sentiment'), on='text', suffixes=['', '_article'])
+# df.drop_duplicates('text').sort_values(by='sentiment_article').head(20).translated_text_article.values
+#
+#
+# nuclear = df[df.sentence.str.lower().str.contains('|'.join(nuclear_keywords))]
+# nuclear[nuclear.sentiment == -1].translated_text.values
+
 # plot average sentiment per topic over time
-topic_sent_time = df_sentences_predictions[['date', 'sentiment'] + topic_names].copy()
+topic_sent_time = df[['date', 'sentiment'] + topic_names].copy()
 topic_sent_time[topic_names] = topic_sent_time[topic_names].replace(False, np.nan)
 topic_sent_time[topic_names] = topic_sent_time[topic_names].multiply(topic_sent_time['sentiment'], axis=0)
 topic_sent_time[topic_names] = topic_sent_time[topic_names].apply(pd.to_numeric)
@@ -54,9 +78,9 @@ topic_sent_time.set_index('date', inplace=True)
 topic_sent_time.sort_index(inplace=True)
 # topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
 # topic_sent_time = topic_sent_time.groupby(topic_sent_time.index.to_period('M')).mean()
-topic_sent_time = topic_sent_time.ewm(halflife='365D', times=topic_sent_time.index)[topic_names].mean()
-topic_sent_time = topic_sent_time.reset_index().drop_duplicates(subset=['date'], keep='first').set_index('date')
-topic_sent_time = topic_sent_time.rolling(window='365D', closed='both')[topic_names].mean()
+# topic_sent_time = topic_sent_time.ewm(halflife='365D', times=topic_sent_time.index)[topic_names].mean()
+# topic_sent_time = topic_sent_time.reset_index().drop_duplicates(subset=['date'], keep='first').set_index('date')
+topic_sent_time = topic_sent_time.rolling(window='1000D', closed='both', min_periods=10)[topic_names].mean()
 topic_sent_time.iloc[40:].plot(cmap='Set1', figsize=(7,7))
 plt.ylabel('Average topic sentiment')
 plt.xlabel('Year')
@@ -65,8 +89,9 @@ plt.xticks(rotation=45, ha='right')
 plt.show()
 
 
+
 # average sentiment per source
-source_sent = df_sentences_predictions.groupby('source_agg').sentiment.mean().sort_values()
+source_sent = df.groupby('source_agg').sentiment.mean().sort_values()
 source_sent.plot(kind='barh')
 plt.xlabel('Average sentiment')
 plt.ylabel('Source')
@@ -74,7 +99,7 @@ plt.savefig(os.path.join(path, 'Plots', 'average-sentiment-across-sources'))
 plt.show()
 
 # average topic sentiment per source
-source_topic_sent = df_sentences_predictions[['source_agg', 'sentiment'] + topic_names].copy()
+source_topic_sent = df[['source_agg', 'sentiment'] + topic_names].copy()
 source_topic_sent[topic_names] = source_topic_sent[topic_names].replace(False, np.nan)
 source_topic_sent[topic_names] = source_topic_sent[topic_names].multiply(source_topic_sent.sentiment, axis=0)
 source_topic_sent = source_topic_sent.explode('source_agg')
@@ -120,8 +145,8 @@ def fix_orgs(found_entities: list):
             entities.append(entity)
 
     return entities
-df_sentences_predictions['organizations'] = df_sentences_predictions.organizations.apply(fix_orgs)
-df_sentences_predictions.organizations.explode().value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
+df['organizations'] = df.organizations.apply(fix_orgs)
+df.organizations.explode().value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
 plt.ylabel('Organisation')
 plt.xlabel('Number of mentions')
 plt.savefig(os.path.join(path, 'Plots', 'top-50-organizations'))
@@ -160,7 +185,7 @@ def fix_persons(found_entities: list):
 
     return entities
 
-df_sentences_predictions['persons'] = df_sentences_predictions.persons.apply(fix_persons)
+df['persons'] = df.persons.apply(fix_persons)
 
 def first_last_name_deduplication(all_persons: list):
     first_and_last_names = []
@@ -178,11 +203,11 @@ def first_last_name_deduplication(all_persons: list):
     return name_dict
 
 
-choices = df_sentences_predictions.persons.explode().dropna().unique()
+choices = df.persons.explode().dropna().unique()
 name_dict = first_last_name_deduplication(choices)
 
-df_sentences_predictions['persons'] = df_sentences_predictions.persons.explode().replace(name_dict).reset_index().groupby('index')['persons'].apply(list)
-df_sentences_predictions.persons.explode().replace(name_dict).value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
+df['persons'] = df.persons.explode().replace(name_dict).reset_index().groupby('index')['persons'].apply(list)
+df.persons.explode().replace(name_dict).value_counts(ascending=True).tail(50).plot(kind='barh', figsize=(6,10))
 plt.ylabel('Person')
 plt.xlabel('Number of mentions')
 plt.savefig(os.path.join(path, 'Plots', 'top-50-persons'))
@@ -190,21 +215,21 @@ plt.show()
 
 
 ## NER network
-df_sentences_predictions['entities'] = df_sentences_predictions.persons + df_sentences_predictions.organizations # take both people and organizations
+df['entities'] = df.persons + df.organizations # take both people and organizations
 
-entities = df_sentences_predictions.entities.explode().value_counts() # rank entities by # of mentions
+entities = df.entities.explode().value_counts() # rank entities by # of mentions
 entities = entities[entities > 5] # take entities which appear more than 5 times
-newspaper_names = list(df_sentences_predictions.source_agg.unique())
+newspaper_names = list(df.source_agg.unique())
 newspaper_names += ['De Volkskrant', 'Volkskrant', 'Telegraaf', 'FD', 'Financieele Dagblad']
 entities = entities[entities.index.map(lambda x: x not in newspaper_names)] # remove newspapers from entities
 
 entity_names = list(entities.index)
 
 #### do NER network on article level COMMENT OUT IF NOT WANTED
-# df_sentences_predictions = df_sentences_predictions.explode('entities').dropna(subset=['entities'])
-# df_sentences_predictions.groupby(['text', 'source_agg']).entities.apply(list).reset_index(drop=True)
+# df = df.explode('entities').dropna(subset=['entities'])
+# df.groupby(['text', 'source_agg']).entities.apply(list).reset_index(drop=True)
 
-res = df_sentences_predictions.entities.explode().dropna()
+res = df.entities.explode().dropna()
 res = res[res.apply(lambda x: x in entity_names)]
 
 res = res.groupby(res.index).apply(set)
@@ -217,14 +242,14 @@ for index, item in res.iteritems():
     entities_co_occ.loc[pair[1], pair[0]] += 1
 
 # find topic loading for each entity
-entity_topic_loadings = df_sentences_predictions.explode('entities').groupby('entities')[topic_names].mean()
+entity_topic_loadings = df.explode('entities').groupby('entities')[topic_names].mean()
 entity_dom_topic = entity_topic_loadings.T.idxmax() # find dominant topic
 
 # find average sentiment per entity
-entity_sentiment = df_sentences_predictions.explode('entities').dropna(subset=['entities']).groupby('entities').sentiment.mean()
+entity_sentiment = df.explode('entities').dropna(subset=['entities']).groupby('entities').sentiment.mean()
 
 # find mentions by source per entity
-entity_source_mentions = pd.get_dummies(df_sentences_predictions.explode('entities').dropna(subset=['entities']).set_index('entities').source_agg)
+entity_source_mentions = pd.get_dummies(df.explode('entities').dropna(subset=['entities']).set_index('entities').source_agg)
 entity_source_mentions = entity_source_mentions.groupby('entities').sum()
 
 # load into NetworkX

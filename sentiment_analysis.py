@@ -1,30 +1,42 @@
 import pandas as pd
 import os
 import swifter
-import spacy
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 path = 'C:/Users/Jakob/Documents/RLI Nuclear Energy'
 
 df = pd.read_pickle(os.path.join(path, 'rli-sentencs-plus-translation.pkl'))
 
-def sentiment_analysis_spacy(input_text, spacy_model):
-    doc = spacy_model(input_text)
-    polarity = doc._.polarity
-    # subjectivity = doc._.subjectivity
+analyser = SentimentIntensityAnalyzer()
 
-    return polarity
+def sentiment_analysis_vader(input_text, vader_analyser):
+    vs = vader_analyser.polarity_scores(input_text)
 
-nlp = spacy.load("en_core_web_trf")
-nlp.add_pipe('spacytextblob')
+    return vs
 
-df['sentiment'] = df.translated_text.astype(str).swifter.apply(lambda x: sentiment_analysis_spacy(x, nlp))
+sentiment_analysis_vader('Fukushima I still think that is one of the most shocking amoral events of recent years.', analyser)
 
-# examples for good sentiment
-df.loc[df.sentiment == 1, 'translated_text'].sample().value_counts()
+df['vader_compound_sent'] = df.translated_text.apply(str).swifter.apply(lambda x: sentiment_analysis_vader(x, analyser)).apply(pd.Series)['compound']
+
+df['sentiment'] = df.vader_compound_sent
 
 # export
 df.to_pickle(os.path.join(path, 'rli-sentence-translation-sentiment.pkl'))
 
+
+# Sentiment analysis using TextBlob
+# import spacy
+# def sentiment_analysis_spacy(input_text, spacy_model):
+#     doc = spacy_model(input_text)
+#     polarity = doc._.polarity
+#     # subjectivity = doc._.subjectivity
+#
+#     return polarity
+#
+# nlp = spacy.load("en_core_web_trf")
+# nlp.add_pipe('spacytextblob')
+#
+# df['sentiment'] = df.translated_text.astype(str).swifter.apply(lambda x: sentiment_analysis_spacy(x, nlp))
 
 # Sentiment analysis using BERTje
 # from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
@@ -39,3 +51,5 @@ df.to_pickle(os.path.join(path, 'rli-sentence-translation-sentiment.pkl'))
 # df_sentences_predictions.sample(10).sentence.apply(get_sentiment)
 #
 # df_sentences_predictions['sentiment'] = df_sentences_predictions.sentence.apply(get_sentiment)
+
+# sentiment analysis using VADER
