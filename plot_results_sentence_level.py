@@ -19,21 +19,6 @@ df.drop_duplicates(['sentence', 'text', 'source_agg'], inplace=True) # remove du
 topic_names = ['Climate impact', 'Waste and storage', 'Geopolitics', 'Safety', 'Cost',
        'Technology', 'Ethics', 'Politics', 'Choice of site']
 
-# plot topic prominence in number of sentences
-# topic_prominence = df[['date'] + topic_names].copy()
-# # topic_prominence.set_index('date', inplace=True)
-# # topic_prominence.sort_index(inplace=True)
-# # topic_prominence = topic_prominence.rolling(window='1000D', closed='both', min_periods=4000).mean()
-# # topic_prominence = topic_prominence.rolling(window='365D', closed='both').mean()
-# # # topic_prominence = topic_prominence.groupby(topic_prominence.date.dt.to_period('Y')).mean()
-# # topic_prominence.plot(colormap='Set1', figsize=(7,7))
-# # plt.xlabel('Year')
-# # plt.ylabel('Topic prominence')
-# # plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
-# # plt.xticks(rotation=45, ha="right")
-# # # plt.savefig(os.path.join(path, 'Plots', 'topic-prominence-over-time-sentences'))
-# # plt.show()
-
 
 # plot average sentiment per topic
 topic_sent = df[topic_names].multiply(df['sentiment'], axis=0)
@@ -41,7 +26,7 @@ topic_sent = topic_sent.sum()/(df[topic_names].sum())
 topic_sent.sort_values().plot(kind='barh')
 plt.xlabel('Average sentiment')
 plt.ylabel('Topic')
-plt.savefig(os.path.join(path, 'Plots', 'average-topic-sentiment'))
+plt.savefig(os.path.join(path, 'Plots', 'average-topic-sentiment.pdf'))
 plt.show()
 
 # plot average sentiment over time
@@ -293,3 +278,18 @@ nx.readwrite.graphml.write_graphml(G, path=os.path.join(path, 'rli-entity-networ
 # viz.interactive()
 #
 # altair_viewer.show(viz.interactive())
+
+# plot topic prominence in number of sentences
+# topic_prominence = df[['date'] + topic_names].copy()
+# # topic_prominence.set_index('date', inplace=True)
+# # topic_prominence.sort_index(inplace=True)
+# # topic_prominence = topic_prominence.rolling(window='1000D', closed='both', min_periods=4000).mean()
+# # topic_prominence = topic_prominence.rolling(window='365D', closed='both').mean()
+# # # topic_prominence = topic_prominence.groupby(topic_prominence.date.dt.to_period('Y')).mean()
+# # topic_prominence.plot(colormap='Set1', figsize=(7,7))
+# # plt.xlabel('Year')
+# # plt.ylabel('Topic prominence')
+# # plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
+# # plt.xticks(rotation=45, ha="right")
+# # # plt.savefig(os.path.join(path, 'Plots', 'topic-prominence-over-time-sentences'))
+# # plt.show()
