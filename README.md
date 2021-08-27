@@ -4,7 +4,7 @@ Download the data folder from Dropbox, specify the correct path and run the code
 1) read_articles.py - reads and consolidates the raw articles, can also skip and continue with rli-articles-clean.xlsx instead
 2) data_exploration.py - produces explorative plots of the data
 3) google_batch_translate.py - needs google cloud translation credentials, can also skip and continue with rli-sentencs-plus-translation.pkl instead
-4) sentiment_analysis.py - Spacy sentiment analysis on translated sentences
+4) sentiment_analysis.py - VADER sentiment analysis on translated sentences
 5) named-entity-recognition.py - Finds organizations, people, locations, and miscellaneous entities using Dutch model on original (Dutch) models
 6) topic_analysis.py - Use anchored topic model to predict topics both on sentence and article level
 7) plot_results_article_level.py - plots article level results
