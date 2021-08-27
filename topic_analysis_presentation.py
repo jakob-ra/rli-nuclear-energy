@@ -1,4 +1,4 @@
-## This recreates the (unguided) topic model visualization first presented
+## This recreates the (unguided) topic model visualization first presented in our video call
 
 import pandas as pd
 import os
