@@ -1,4 +1,4 @@
-This is the code for the Dutch media analysis project on nuclear energy for RLI.
+This is the code for the Dutch media analysis project on nuclear energy for Rli.
 
 Download the data folder from Dropbox, specify the correct path and run the code in this order to replicate results:
 1) read_articles.py - reads and consolidates the raw articles, can also skip and continue with rli-articles-clean.xlsx instead
